@@ -469,16 +469,6 @@ ZIndex = 8
 AddCorner(SearchHolder, CORNER_RADIUS)
 AddStroke(SearchHolder, COLORS.Border, 0.2, 1)
 
-Create("TextLabel", {
-BackgroundTransparency = 1,
-Position = UDim2.fromOffset(7, 0),
-Size = UDim2.fromOffset(20, 30),
-Font = Enum.Font.GothamBold,
-Text = "âŒ•",
-TextColor3 = COLORS.Muted,
-TextSize = 16,
-ZIndex = 9
-}, SearchHolder)
 
 local SearchBox = Create("TextBox", {
 BackgroundTransparency = 1,
@@ -1141,17 +1131,6 @@ AddCorner(Select, CORNER_RADIUS)
 AddStroke(Select, COLORS.Border, 0.15, 1)
 AddPadding(Select, 10, 25, 0, 0)
 
-Create("TextLabel", {
-BackgroundTransparency = 1,
-AnchorPoint = Vector2.new(1, 0.5),
-Position = UDim2.new(1, -8, 0.5, 0),
-Size = UDim2.fromOffset(16, 16),
-Font = Enum.Font.GothamBold,
-Text = "â–¼",
-TextColor3 = COLORS.Muted,
-TextSize = 8,
-ZIndex = 13
-}, Select)
 
 local Popup = Create("Frame", {
 Name = "DropdownPopup",
