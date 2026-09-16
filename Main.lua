@@ -1,5 +1,5 @@
 --// FLAREHOOK
---// Full LocalScript
+--// Full LocalScript | Edited in-place with requested features
 --// 8 Tabs | Square Controls | Red/Black
 --// Main / Player / Visuals / World / Combat / Misc / Settings / Credits
 --// Logo decal: 1688841862
@@ -72,6 +72,12 @@ local DropdownUpdaters = {}
 
 local FeatureStates = {}
 
+-- Persistent configuration state
+local ConfigFolder = "Flarehook"
+local ConfigName = "default"
+local ConfigAutoload = false
+local ConfigControls = {}
+
 local FPS = 0
 local SessionStart = os.clock()
 local SessionClicks = 0
@@ -81,6 +87,49 @@ local MovementEnabled = true
 local ThirdPersonEnabled = false
 local NotificationsEnabled = true
 local PanicEnabled = false
+
+local MainScriptEnabled = true
+
+-- Visual settings
+local ESPEnabled = false
+local NameTagsEnabled = false
+local HealthBarsEnabled = false
+local DistanceEnabled = false
+local TracersEnabled = false
+local TeamColorsEnabled = false
+local HitEffectsEnabled = false
+
+-- Combat settings
+local AimAssistEnabled = false
+local AimbotEnabled = false
+local TriggerbotEnabled = false
+local HitboxEnabled = false
+local AutoShootEnabled = false
+local TeamCheckEnabled = true
+local VisibilityCheckEnabled = true
+local TargetLockEnabled = false
+local RecoilControlEnabled = false
+local FOVCircleEnabled = false
+
+local TargetPriority = "Closest to Crosshair"
+local TargetPartName = "Head"
+local PredictionAmount = 0
+local AimFOV = 120
+local AimSmoothing = 0.35 -- 0 = snap, 1 = very slow
+local AimAssistSmoothing = 0.18 -- intentionally faster than smoothing 1
+local HitboxSize = 8
+local RecoilStrength = 0
+
+local CrosshairColor = COLORS.Red
+local CrosshairSize = 4
+local CrosshairThickness = 2
+local CrosshairGap = 5
+
+local ESPColor = COLORS.Red
+local HitEffectColor = COLORS.Red
+
+local ToggleKey = Enum.KeyCode.Insert
+local PanicKey = Enum.KeyCode.P
 
 --==================================================
 -- UTILITY
@@ -314,20 +363,10 @@ ZIndex = 15
 
 RegisterAccent(HeaderAccent, "BackgroundColor3")
 
-local HeaderLogo = Create("ImageLabel", {
-Name = "HeaderLogo",
-BackgroundTransparency = 1,
-Image = LOGO_ID,
-Position = UDim2.fromOffset(16, 10),
-Size = UDim2.fromOffset(38, 38),
-ScaleType = Enum.ScaleType.Fit,
-ZIndex = 20
-}, Header)
-
 Create("TextLabel", {
 Name = "Title",
 BackgroundTransparency = 1,
-Position = UDim2.fromOffset(62, 7),
+Position = UDim2.fromOffset(16, 7),
 Size = UDim2.fromOffset(300, 25),
 Font = Enum.Font.GothamBold,
 Text = "FLAREHOOK",
@@ -339,7 +378,7 @@ ZIndex = 20
 
 Create("TextLabel", {
 BackgroundTransparency = 1,
-Position = UDim2.fromOffset(63, 31),
+Position = UDim2.fromOffset(17, 31),
 Size = UDim2.fromOffset(300, 17),
 Font = Enum.Font.Fantasy,
 Text = "Advanced interface",
@@ -775,15 +814,21 @@ end)
 
 Update(Enabled, false)
 
-return {
+local Control = {
+Type = "Toggle",
+Name = title,
 Set = function(value)
-Update(value, true)
+Update(value == true, true)
 end,
 
 Get = function()
 return Enabled
 end
 }
+
+ConfigControls[title] = Control
+
+return Control
 end
 
 --==================================================
@@ -932,15 +977,23 @@ end)
 
 SetValue(Value, false)
 
-return {
+local Control = {
+Type = "Slider",
+Name = title,
 Set = function(value)
+if type(value) == "number" then
 SetValue(value, true)
+end
 end,
 
 Get = function()
 return Value
 end
 }
+
+ConfigControls[title] = Control
+
+return Control
 end
 
 --==================================================
@@ -1216,7 +1269,9 @@ end)
 
 table.insert(DropdownUpdaters, UpdatePosition)
 
-return {
+local Control = {
+Type = "Dropdown",
+Name = title,
 Set = function(value)
 for _, option in ipairs(options) do
 if option == value then
@@ -1230,6 +1285,10 @@ Get = function()
 return Selected
 end
 }
+
+ConfigControls[title] = Control
+
+return Control
 end
 
 --==================================================
@@ -1450,42 +1509,24 @@ end
 -- TAB
 --==================================================
 
-local function CreateTab(name, icon, order)
+local function CreateTab(name, order)
 local Button = Create("TextButton", {
 Name = name,
 BackgroundColor3 = Color3.fromRGB(15, 15, 18),
 BorderSizePixel = 0,
 Size = UDim2.new(1, 0, 0, 37),
 AutoButtonColor = false,
-Text = "",
+Text = name,
 LayoutOrder = order,
+Font = Enum.Font.Fantasy,
+TextColor3 = COLORS.Muted,
+TextSize = 11,
+TextXAlignment = Enum.TextXAlignment.Left,
 ZIndex = 9
 }, TabHolder)
 
 AddCorner(Button, CORNER_RADIUS)
-
-local Icon = Create("TextLabel", {
-BackgroundTransparency = 1,
-Position = UDim2.fromOffset(9, 0),
-Size = UDim2.fromOffset(24, 37),
-Font = Enum.Font.GothamBold,
-Text = icon,
-TextColor3 = COLORS.Muted,
-TextSize = 13,
-ZIndex = 11
-}, Button)
-
-local Label = Create("TextLabel", {
-BackgroundTransparency = 1,
-Position = UDim2.fromOffset(39, 0),
-Size = UDim2.new(1, -44, 1, 0),
-Font = Enum.Font.Fantasy,
-Text = name,
-TextColor3 = COLORS.Muted,
-TextSize = 11,
-TextXAlignment = Enum.TextXAlignment.Left,
-ZIndex = 11
-}, Button)
+AddPadding(Button, 14, 8, 0, 0)
 
 local Indicator = Create("Frame", {
 BackgroundColor3 = COLORS.Red,
@@ -1501,8 +1542,7 @@ RegisterAccent(Indicator, "BackgroundColor3")
 
 Tabs[name] = {
 Button = Button,
-Icon = Icon,
-Label = Label,
+Label = Button,
 Indicator = Indicator
 }
 
@@ -1525,22 +1565,18 @@ end)
 Button.MouseButton1Click:Connect(function()
 ClickSound()
 SessionClicks += 1
-
 CurrentTab = name
 
 for TabName, Data in pairs(Tabs) do
 local Active = TabName == name
-
 Data.Indicator.Visible = Active
 
 if Active then
 Data.Button.BackgroundColor3 = Color3.fromRGB(29, 20, 23)
-Data.Icon.TextColor3 = COLORS.White
 Data.Label.TextColor3 = COLORS.White
 Data.Label.Font = Enum.Font.GothamBold
 else
 Data.Button.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
-Data.Icon.TextColor3 = COLORS.Muted
 Data.Label.TextColor3 = COLORS.Muted
 Data.Label.Font = Enum.Font.Fantasy
 end
@@ -1583,12 +1619,17 @@ MainPage,
 "Enable or disable the main feature system.",
 true,
 function(state)
+MainScriptEnabled = state
 RegisterFeature("Script", state)
 
+if not state then
+ClearAllRuntimeFeatures()
+end
+
 if state then
-Notify("Flarehook", "Feature system enabled.", 2)
+	Notify("Flarehook", "Feature system enabled.", 2)
 else
-Notify("Flarehook", "Feature system disabled.", 2)
+	Notify("Flarehook", "Feature system disabled.", 2)
 end
 end
 )
@@ -1895,154 +1936,619 @@ RegisterFeature("Character Visibility", state)
 end
 )
 
+
+--==================================================
+-- RUNTIME FEATURE HELPERS
+--==================================================
+
+local RuntimeFolder = Create("Folder", {
+	Name = "FlarehookRuntime"
+}, ScreenGui)
+
+local ESPObjects = {}
+local HitboxOriginals = {}
+local TargetLockedPlayer = nil
+local LastShot = 0
+local LastHitEffect = 0
+
+local function IsAlive(player)
+	if not player or player == Player then
+		return false
+	end
+
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+
+	return character ~= nil and humanoid ~= nil and humanoid.Health > 0 and root ~= nil
+end
+
+local function IsTeammate(player)
+	if not TeamCheckEnabled then
+		return false
+	end
+
+	return player.Team ~= nil and Player.Team ~= nil and player.Team == Player.Team
+end
+
+local function GetTargetPart(player)
+	if not IsAlive(player) then
+		return nil
+	end
+
+	local character = player.Character
+	return character:FindFirstChild(TargetPartName)
+		or character:FindFirstChild("Head")
+		or character:FindFirstChild("HumanoidRootPart")
+end
+
+local function HasLineOfSight(part)
+	if not VisibilityCheckEnabled or not part then
+		return true
+	end
+
+	local origin = Camera.CFrame.Position
+	local direction = part.Position - origin
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = {Player.Character, RuntimeFolder}
+
+	local result = workspace:Raycast(origin, direction, params)
+	return result == nil or result.Instance:IsDescendantOf(part.Parent)
+end
+
+local function GetPredictedPosition(part)
+	if not part then
+		return nil
+	end
+
+	local velocity = part.AssemblyLinearVelocity
+	return part.Position + velocity * PredictionAmount
+end
+
+local function GetScreenDistance(worldPosition)
+	local screenPoint, onScreen = Camera:WorldToViewportPoint(worldPosition)
+	if not onScreen then
+		return math.huge, screenPoint
+	end
+
+	local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+	local point = Vector2.new(screenPoint.X, screenPoint.Y)
+
+	return (point - center).Magnitude, screenPoint
+end
+
+local function GetTarget()
+	local bestPlayer = nil
+	local bestScore = math.huge
+	local closestDistance = math.huge
+
+	if TargetLockEnabled and TargetLockedPlayer and IsAlive(TargetLockedPlayer)
+		and not IsTeammate(TargetLockedPlayer) then
+		local lockedPart = GetTargetPart(TargetLockedPlayer)
+		if lockedPart and HasLineOfSight(lockedPart) then
+			return TargetLockedPlayer, lockedPart
+		end
+	end
+
+	for _, otherPlayer in ipairs(Players:GetPlayers()) do
+		if IsAlive(otherPlayer) and not IsTeammate(otherPlayer) then
+			local part = GetTargetPart(otherPlayer)
+			if part and HasLineOfSight(part) then
+				local distance = (part.Position - Camera.CFrame.Position).Magnitude
+				local screenDistance = GetScreenDistance(part.Position)
+
+				if distance <= (Player:GetAttribute("FlarehookRange") or 100) then
+					local score
+
+					if TargetPriority == "Lowest Health" then
+						local humanoid = otherPlayer.Character:FindFirstChildOfClass("Humanoid")
+						score = humanoid and humanoid.Health or math.huge
+					elseif TargetPriority == "Closest to Player" then
+						score = distance
+					elseif TargetPriority == "Closest to Crosshair" then
+						score = screenDistance
+					else
+						score = screenDistance
+					end
+
+					if TargetPriority == "Closest to Crosshair" and screenDistance > AimFOV then
+						continue
+					end
+
+					if score < bestScore then
+						bestScore = score
+						bestPlayer = otherPlayer
+						closestDistance = distance
+					end
+				end
+			end
+		end
+	end
+
+	if bestPlayer and TargetLockEnabled then
+		TargetLockedPlayer = bestPlayer
+	end
+
+	return bestPlayer, bestPlayer and GetTargetPart(bestPlayer)
+end
+
+local function ClearTargetLock()
+	TargetLockedPlayer = nil
+end
+
+local function AimAt(part, smoothing)
+	if not part or not Camera then
+		return
+	end
+
+	local predicted = GetPredictedPosition(part)
+	if not predicted then
+		return
+	end
+
+	local desired = CFrame.lookAt(Camera.CFrame.Position, predicted)
+	local alpha = math.clamp(smoothing, 0, 1)
+
+	-- 0 = instant snap, 1 = slow.
+	if alpha <= 0 then
+		Camera.CFrame = desired
+	else
+		Camera.CFrame = Camera.CFrame:Lerp(desired, alpha)
+	end
+end
+
+local function GetEquippedTool()
+	local character = Player.Character
+	if not character then
+		return nil
+	end
+
+	return character:FindFirstChildOfClass("Tool")
+end
+
+local function FireCurrentTool()
+	local tool = GetEquippedTool()
+	if not tool then
+		return false
+	end
+
+	local now = os.clock()
+	if now - LastShot < 0.08 then
+		return false
+	end
+
+	LastShot = now
+	tool:Activate()
+	return true
+end
+
+local function MakeCrosshair()
+	local old = ScreenGui:FindFirstChild("FlarehookCrosshair")
+	if old then
+		old:Destroy()
+	end
+
+	local holder = Create("Frame", {
+		Name = "FlarehookCrosshair",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(80, 80),
+		ZIndex = 800
+	}, ScreenGui)
+
+	local circle = Create("Frame", {
+		Name = "Circle",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(CrosshairSize * 2 + CrosshairGap * 2, CrosshairSize * 2 + CrosshairGap * 2),
+		ZIndex = 801
+	}, holder)
+
+	AddCorner(circle, 100)
+	local stroke = AddStroke(circle, CrosshairColor, 0, CrosshairThickness)
+	stroke.Name = "CrosshairStroke"
+
+	local dot = Create("Frame", {
+		Name = "Dot",
+		BackgroundColor3 = CrosshairColor,
+		BorderSizePixel = 0,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(CrosshairSize, CrosshairSize),
+		ZIndex = 802
+	}, holder)
+
+	AddCorner(dot, 100)
+
+	return holder
+end
+
+local function ClearESP(player)
+	local data = ESPObjects[player]
+	if not data then
+		return
+	end
+
+	for _, object in pairs(data) do
+		if typeof(object) == "Instance" and object.Parent then
+			object:Destroy()
+		end
+	end
+
+	ESPObjects[player] = nil
+end
+
+local function BuildESP(player)
+	if player == Player or not IsAlive(player) then
+		return
+	end
+
+	ClearESP(player)
+
+	local character = player.Character
+	if not character then
+		return
+	end
+
+	local head = character:FindFirstChild("Head")
+	local root = character:FindFirstChild("HumanoidRootPart")
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not head or not root or not humanoid then
+		return
+	end
+
+	local billboard = Create("BillboardGui", {
+		Name = "FlarehookESP",
+		Adornee = head,
+		Size = UDim2.fromOffset(190, 70),
+		StudsOffset = Vector3.new(0, 2.8, 0),
+		AlwaysOnTop = true,
+		Enabled = true,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	}, RuntimeFolder)
+
+	local nameLabel = Create("TextLabel", {
+		Name = "Name",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 22),
+		Font = Enum.Font.GothamBold,
+		Text = player.DisplayName ~= "" and player.DisplayName or player.Name,
+		TextColor3 = ESPColor,
+		TextSize = 13,
+		TextStrokeTransparency = 0.5,
+		Visible = NameTagsEnabled or ESPEnabled
+	}, billboard)
+
+	local healthBack = Create("Frame", {
+		Name = "HealthBack",
+		BackgroundColor3 = Color3.fromRGB(30, 30, 34),
+		BorderSizePixel = 0,
+		Position = UDim2.new(0.1, 0, 0, 25),
+		Size = UDim2.new(0.8, 0, 0, 7),
+		Visible = HealthBarsEnabled or ESPEnabled
+	}, billboard)
+	AddCorner(healthBack, 2)
+
+	local healthFill = Create("Frame", {
+		Name = "Health",
+		BackgroundColor3 = ESPColor,
+		BorderSizePixel = 0,
+		Size = UDim2.fromScale(1, 1)
+	}, healthBack)
+	AddCorner(healthFill, 2)
+
+	local distanceLabel = Create("TextLabel", {
+		Name = "Distance",
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 0, 0, 34),
+		Size = UDim2.new(1, 0, 0, 18),
+		Font = Enum.Font.Fantasy,
+		TextColor3 = COLORS.Text,
+		TextSize = 10,
+		TextStrokeTransparency = 0.6,
+		Visible = DistanceEnabled or ESPEnabled
+	}, billboard)
+
+	local tracer = Create("Frame", {
+		Name = "Tracer",
+		AnchorPoint = Vector2.new(0.5, 0),
+		BackgroundColor3 = ESPColor,
+		BorderSizePixel = 0,
+		Size = UDim2.fromOffset(2, 100),
+		Visible = false,
+		ZIndex = 790
+	}, ScreenGui)
+
+	ESPObjects[player] = {
+		Billboard = billboard,
+		Name = nameLabel,
+		HealthBack = healthBack,
+		Health = healthFill,
+		Distance = distanceLabel,
+		Tracer = tracer,
+	}
+end
+
+local function RefreshESP()
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= Player then
+			if ESPEnabled or NameTagsEnabled or HealthBarsEnabled or DistanceEnabled or TracersEnabled then
+				BuildESP(player)
+			else
+				ClearESP(player)
+			end
+		end
+	end
+end
+
+local function ApplyHitboxes()
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= Player and IsAlive(player) and not IsTeammate(player) then
+			local head = player.Character:FindFirstChild("Head")
+			if head then
+				if HitboxEnabled then
+					if not HitboxOriginals[head] then
+						HitboxOriginals[head] = {
+							Size = head.Size,
+							Transparency = head.Transparency,
+							CanCollide = head.CanCollide
+						}
+					end
+
+					head.Size = Vector3.new(HitboxSize, HitboxSize, HitboxSize)
+					head.Transparency = math.max(head.Transparency, 0.5)
+					head.CanCollide = false
+				elseif HitboxOriginals[head] then
+					local original = HitboxOriginals[head]
+					head.Size = original.Size
+					head.Transparency = original.Transparency
+					head.CanCollide = original.CanCollide
+					HitboxOriginals[head] = nil
+				end
+			end
+		end
+	end
+end
+
+local function ClearAllRuntimeFeatures()
+	AimAssistEnabled = false
+	AimbotEnabled = false
+	TriggerbotEnabled = false
+	HitboxEnabled = false
+	AutoShootEnabled = false
+	FOVCircleEnabled = false
+	TargetLockEnabled = false
+	RecoilControlEnabled = false
+	ESPEnabled = false
+	NameTagsEnabled = false
+	HealthBarsEnabled = false
+	DistanceEnabled = false
+	TracersEnabled = false
+	TeamColorsEnabled = false
+	HitEffectsEnabled = false
+	ClearTargetLock()
+
+	for player in pairs(ESPObjects) do
+		ClearESP(player)
+	end
+
+	for part, original in pairs(HitboxOriginals) do
+		if part and part.Parent then
+			part.Size = original.Size
+			part.Transparency = original.Transparency
+			part.CanCollide = original.CanCollide
+		end
+		HitboxOriginals[part] = nil
+	end
+
+	local crosshair = ScreenGui:FindFirstChild("FlarehookCrosshair")
+	if crosshair then
+		crosshair.Visible = false
+	end
+end
+
 --==================================================
 -- VISUALS
 --==================================================
 
 CreateSection(
-VisualsPage,
-"Player Visuals",
-"Player highlight and information effects."
+	VisualsPage,
+	"Player Visuals",
+	"ESP, names, health, distance, tracers and team colors."
 )
 
 CreateToggle(
-VisualsPage,
-"Player Highlights",
-"Highlight other players.",
-false,
-function(state)
-RegisterFeature("Player Highlights", state)
-
-for _, OtherPlayer in ipairs(Players:GetPlayers()) do
-if OtherPlayer ~= Player then
-local Character = OtherPlayer.Character
-
-if Character then
-local Highlight = Character:FindFirstChild("FlarehookHighlight")
-
-if state then
-if not Highlight then
-Highlight = Instance.new("Highlight")
-Highlight.Name = "FlarehookHighlight"
-Highlight.FillColor = COLORS.Red
-Highlight.OutlineColor = COLORS.White
-Highlight.FillTransparency = 0.65
-Highlight.OutlineTransparency = 0.2
-Highlight.Parent = Character
-end
-elseif Highlight then
-Highlight:Destroy()
-end
-end
-end
-end
-end
+	VisualsPage,
+	"ESP",
+	"Enable the full player ESP package.",
+	false,
+	function(state)
+		ESPEnabled = state
+		RegisterFeature("ESP", state)
+		RefreshESP()
+	end
 )
 
 CreateToggle(
-VisualsPage,
-"ESP",
-"Enable player ESP state.",
-false,
-function(state)
-RegisterFeature("ESP", state)
-end
+	VisualsPage,
+	"Player Highlights",
+	"Highlight other players.",
+	false,
+	function(state)
+		RegisterFeature("Player Highlights", state)
+
+		for _, otherPlayer in ipairs(Players:GetPlayers()) do
+			if otherPlayer ~= Player and otherPlayer.Character then
+				local highlight = otherPlayer.Character:FindFirstChild("FlarehookHighlight")
+
+				if state then
+					if not highlight then
+						highlight = Instance.new("Highlight")
+						highlight.Name = "FlarehookHighlight"
+						highlight.FillColor = TeamColorsEnabled and (otherPlayer.TeamColor.Color or COLORS.Red) or ESPColor
+						highlight.OutlineColor = COLORS.White
+						highlight.FillTransparency = 0.65
+						highlight.OutlineTransparency = 0.2
+						highlight.Parent = otherPlayer.Character
+					end
+				elseif highlight then
+					highlight:Destroy()
+				end
+			end
+		end
+	end
 )
 
 CreateToggle(
-VisualsPage,
-"Name Tags",
-"Show player name-tag state.",
-false,
-function(state)
-RegisterFeature("Name Tags", state)
-end
+	VisualsPage,
+	"Name Tags",
+	"Show player names above characters.",
+	false,
+	function(state)
+		NameTagsEnabled = state
+		RegisterFeature("Name Tags", state)
+		RefreshESP()
+	end
 )
 
 CreateToggle(
-VisualsPage,
-"Health Bars",
-"Show player health-bar state.",
-false,
-function(state)
-RegisterFeature("Health Bars", state)
-end
+	VisualsPage,
+	"Health Bars",
+	"Show health bars above characters.",
+	false,
+	function(state)
+		HealthBarsEnabled = state
+		RegisterFeature("Health Bars", state)
+		RefreshESP()
+	end
 )
 
 CreateToggle(
-VisualsPage,
-"Distance Indicators",
-"Show player distance information.",
-false,
-function(state)
-RegisterFeature("Distance", state)
-end
+	VisualsPage,
+	"Distance",
+	"Show the distance to each player.",
+	false,
+	function(state)
+		DistanceEnabled = state
+		RegisterFeature("Distance", state)
+		RefreshESP()
+	end
 )
 
 CreateToggle(
-VisualsPage,
-"Tracers",
-"Enable player tracer state.",
-false,
-function(state)
-RegisterFeature("Tracers", state)
-end
+	VisualsPage,
+	"Tracers",
+	"Draw lines from the screen center to players.",
+	false,
+	function(state)
+		TracersEnabled = state
+		RegisterFeature("Tracers", state)
+		RefreshESP()
+	end
 )
 
 CreateToggle(
-VisualsPage,
-"Team-Color Indicators",
-"Use player team colors for indicators.",
-false,
-function(state)
-RegisterFeature("Team Colors", state)
-end
+	VisualsPage,
+	"Team Colors",
+	"Use each player's team color in ESP.",
+	false,
+	function(state)
+		TeamColorsEnabled = state
+		RegisterFeature("Team Colors", state)
+		RefreshESP()
+	end
 )
 
 CreateSection(
-VisualsPage,
-"Screen Effects",
-"Local interface and visual effects."
+	VisualsPage,
+	"Crosshair",
+	"Custom circle crosshair controls."
 )
 
 CreateToggle(
-VisualsPage,
-"Crosshair",
-"Show the custom crosshair.",
-false,
-function(state)
-RegisterFeature("Crosshair", state)
+	VisualsPage,
+	"Crosshair",
+	"Show the actual circular crosshair.",
+	false,
+	function(state)
+		RegisterFeature("Crosshair", state)
 
-local Crosshair = ScreenGui:FindFirstChild("FlarehookCrosshair")
+		local crosshair = ScreenGui:FindFirstChild("FlarehookCrosshair")
+		if not crosshair then
+			crosshair = MakeCrosshair()
+		end
 
-if state and not Crosshair then
-Crosshair = Create("Frame", {
-Name = "FlarehookCrosshair",
-BackgroundColor3 = COLORS.Red,
-BorderSizePixel = 0,
-AnchorPoint = Vector2.new(0.5, 0.5),
-Position = UDim2.fromScale(0.5, 0.5),
-Size = UDim2.fromOffset(4, 4),
-ZIndex = 800
-}, ScreenGui)
+		crosshair.Visible = state
+	end
+)
 
-AddCorner(Crosshair, 2)
-end
+CreateSlider(
+	VisualsPage,
+	"Crosshair Size",
+	"Adjust the center-dot size.",
+	1,
+	12,
+	4,
+	function(value)
+		CrosshairSize = value
+		local crosshair = ScreenGui:FindFirstChild("FlarehookCrosshair")
+		if crosshair then
+			local dot = crosshair:FindFirstChild("Dot")
+			local circle = crosshair:FindFirstChild("Circle")
+			if dot then dot.Size = UDim2.fromOffset(value, value) end
+			if circle then circle.Size = UDim2.fromOffset(value * 2 + CrosshairGap * 2, value * 2 + CrosshairGap * 2) end
+		end
+	end
+)
 
-if Crosshair then
-Crosshair.Visible = state
-end
-end
+CreateSlider(
+	VisualsPage,
+	"Crosshair Gap",
+	"Adjust the gap around the center dot.",
+	0,
+	20,
+	5,
+	function(value)
+		CrosshairGap = value
+		local crosshair = ScreenGui:FindFirstChild("FlarehookCrosshair")
+		if crosshair then
+			local circle = crosshair:FindFirstChild("Circle")
+			if circle then circle.Size = UDim2.fromOffset(CrosshairSize * 2 + value * 2, CrosshairSize * 2 + value * 2) end
+		end
+	end
+)
+
+CreateSlider(
+	VisualsPage,
+	"Crosshair Thickness",
+	"Adjust the circle outline thickness.",
+	1,
+	6,
+	2,
+	function(value)
+		CrosshairThickness = value
+		local crosshair = ScreenGui:FindFirstChild("FlarehookCrosshair")
+		if crosshair then
+			local circle = crosshair:FindFirstChild("Circle")
+			local stroke = circle and circle:FindFirstChild("CrosshairStroke")
+			if stroke then stroke.Thickness = value end
+		end
+	end
 )
 
 CreateToggle(
-VisualsPage,
-"Hit-Effect Visuals",
-"Enable local hit-effect visual state.",
-false,
-function(state)
-RegisterFeature("Hit Effects", state)
-end
+	VisualsPage,
+	"Hit-Effect Visuals",
+	"Create a local screen flash when a hit is detected by your game.",
+	false,
+	function(state)
+		HitEffectsEnabled = state
+		RegisterFeature("Hit Effects", state)
+	end
 )
 
 --==================================================
@@ -2151,87 +2657,295 @@ end
 --==================================================
 
 CreateSection(
-CombatPage,
-"Combat",
-"Combat-related interface options."
+	CombatPage,
+	"Aiming",
+	"Targeting controls for your own game's combat system."
 )
 
 CreateToggle(
-CombatPage,
-"Aim Assist",
-"Toggle the aim-assist feature state.",
-false,
-function(state)
-RegisterFeature("Aim Assist", state)
-end
+	CombatPage,
+	"Aim Assist",
+	"Smoothly moves the camera toward the selected target.",
+	false,
+	function(state)
+		AimAssistEnabled = state
+		RegisterFeature("Aim Assist", state)
+	end
 )
 
 CreateToggle(
-CombatPage,
-"Hitbox",
-"Toggle the hitbox feature state.",
-false,
-function(state)
-RegisterFeature("Hitbox", state)
-end
+	CombatPage,
+	"Aimbot",
+	"Automatically aims at the selected target.",
+	false,
+	function(state)
+		AimbotEnabled = state
+		RegisterFeature("Aimbot", state)
+	end
+)
+
+CreateToggle(
+	CombatPage,
+	"Target Lock",
+	"Keep the current target until it becomes invalid.",
+	false,
+	function(state)
+		TargetLockEnabled = state
+		RegisterFeature("Target Lock", state)
+		if not state then
+			ClearTargetLock()
+		end
+	end
+)
+
+CreateToggle(
+	CombatPage,
+	"Team Check",
+	"Ignore teammates when selecting targets.",
+	true,
+	function(state)
+		TeamCheckEnabled = state
+	end
+)
+
+CreateToggle(
+	CombatPage,
+	"Visibility Check",
+	"Only target players that are visible from the camera.",
+	true,
+	function(state)
+		VisibilityCheckEnabled = state
+	end
 )
 
 CreateSlider(
-CombatPage,
-"Range",
-"Adjust the combat range value.",
-1,
-100,
-50,
-function(value)
-Player:SetAttribute("FlarehookRange", value)
-end
+	CombatPage,
+	"FOV Circle",
+	"Set the targeting radius in screen pixels.",
+	20,
+	500,
+	120,
+	function(value)
+		AimFOV = value
+		Player:SetAttribute("FlarehookAimFOV", value)
+	end
 )
 
-CreateSlider(
-CombatPage,
-"Smoothness",
-"Adjust targeting smoothness.",
-1,
-20,
-8,
-function(value)
-Player:SetAttribute("FlarehookSmoothness", value)
-end
+CreateToggle(
+	CombatPage,
+	"FOV Circle Display",
+	"Show the targeting circle around the crosshair.",
+	false,
+	function(state)
+		FOVCircleEnabled = state
+		RegisterFeature("FOV Circle", state)
+
+		local circle = ScreenGui:FindFirstChild("FlarehookFOVCircle")
+		if not circle then
+			circle = Create("Frame", {
+				Name = "FlarehookFOVCircle",
+				BackgroundTransparency = 1,
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.fromScale(0.5, 0.5),
+				Size = UDim2.fromOffset(AimFOV * 2, AimFOV * 2),
+				ZIndex = 799
+			}, ScreenGui)
+			AddCorner(circle, 1000)
+			AddStroke(circle, COLORS.Red, 0.15, 1)
+		end
+
+		circle.Visible = state
+	end
 )
 
 CreateDropdown(
-CombatPage,
-"Target",
-"Choose the target mode.",
-{
-"Closest",
-"Lowest Health",
-"Random",
-"Crosshair"
-},
-"Closest",
-function(option)
-Player:SetAttribute("FlarehookTargetMode", option)
-end
+	CombatPage,
+	"Target Priority",
+	"Choose how targets are prioritized.",
+	{
+		"Closest to Crosshair",
+		"Closest to Player",
+		"Lowest Health"
+	},
+	"Closest to Crosshair",
+	function(option)
+		TargetPriority = option
+		Player:SetAttribute("FlarehookTargetPriority", option)
+		ClearTargetLock()
+	end
+)
+
+CreateDropdown(
+	CombatPage,
+	"Target Part",
+	"Choose which body part is aimed at.",
+	{
+		"Head",
+		"HumanoidRootPart"
+	},
+	"Head",
+	function(option)
+		TargetPartName = option
+	end
+)
+
+CreateSlider(
+	CombatPage,
+	"Prediction",
+	"Lead moving targets by their current velocity.",
+	0,
+	1,
+	0,
+	function(value)
+		PredictionAmount = value / 10
+		Player:SetAttribute("FlarehookPrediction", PredictionAmount)
+	end
+)
+
+CreateSlider(
+	CombatPage,
+	"Smoothing",
+	"0 snaps instantly; 1 is very slow.",
+	0,
+	100,
+	35,
+	function(value)
+		AimSmoothing = value / 100
+		Player:SetAttribute("FlarehookSmoothness", AimSmoothing)
+	end
+)
+
+CreateSlider(
+	CombatPage,
+	"Aim Assist Speed",
+	"Aim Assist is intentionally faster than maximum smoothing.",
+	1,
+	100,
+	18,
+	function(value)
+		AimAssistSmoothing = value / 100
+	end
+)
+
+CreateSlider(
+	CombatPage,
+	"Range",
+	"Maximum target distance.",
+	1,
+	500,
+	100,
+	function(value)
+		Player:SetAttribute("FlarehookRange", value)
+	end
+)
+
+CreateSection(
+	CombatPage,
+	"Shooting",
+	"Tool-based firing controls."
+)
+
+CreateToggle(
+	CombatPage,
+	"Triggerbot",
+	"Fire the equipped Tool when the crosshair is over a target.",
+	false,
+	function(state)
+		TriggerbotEnabled = state
+		RegisterFeature("Triggerbot", state)
+	end
+)
+
+CreateToggle(
+	CombatPage,
+	"Auto Shoot",
+	"Fire the equipped Tool while a target is selected.",
+	false,
+	function(state)
+		AutoShootEnabled = state
+		RegisterFeature("Auto Shoot", state)
+	end
+)
+
+CreateToggle(
+	CombatPage,
+	"Recoil Control",
+	"Apply local camera compensation after firing.",
+	false,
+	function(state)
+		RecoilControlEnabled = state
+		RegisterFeature("Recoil Control", state)
+	end
+)
+
+CreateSlider(
+	CombatPage,
+	"Recoil Strength",
+	"Local camera recoil compensation amount.",
+	0,
+	100,
+	0,
+	function(value)
+		RecoilStrength = value
+	end
+)
+
+CreateSection(
+	CombatPage,
+	"Hitbox",
+	"Local hitbox visualization/expansion for testing your own game."
+)
+
+CreateToggle(
+	CombatPage,
+	"Hitbox Expansion",
+	"Expand target head hitboxes locally for testing.",
+	false,
+	function(state)
+		HitboxEnabled = state
+		RegisterFeature("Hitbox Expansion", state)
+		ApplyHitboxes()
+	end
+)
+
+CreateSlider(
+	CombatPage,
+	"Hitbox Size",
+	"Size used by local test hitboxes.",
+	2,
+	20,
+	8,
+	function(value)
+		HitboxSize = value
+		if HitboxEnabled then
+			ApplyHitboxes()
+		end
+	end
 )
 
 CreateButton(
-CombatPage,
-"Reset Combat",
-"Reset combat values.",
-function()
-Player:SetAttribute("FlarehookRange", 50)
-Player:SetAttribute("FlarehookSmoothness", 8)
-Player:SetAttribute("FlarehookTargetMode", "Closest")
+	CombatPage,
+	"Reset Combat",
+	"Reset combat values.",
+	function()
+		AimFOV = 120
+		AimSmoothing = 0.35
+		AimAssistSmoothing = 0.18
+		PredictionAmount = 0
+		HitboxSize = 8
+		RecoilStrength = 0
+		TargetPriority = "Closest to Crosshair"
+		TargetPartName = "Head"
+		ClearTargetLock()
 
-Notify(
-"Combat",
-"Combat values reset.",
-2
-)
-end,
-"RESET"
+		Player:SetAttribute("FlarehookRange", 100)
+		Player:SetAttribute("FlarehookSmoothness", 0.35)
+		Player:SetAttribute("FlarehookTargetPriority", TargetPriority)
+		Player:SetAttribute("FlarehookPrediction", PredictionAmount)
+
+		Notify("Combat", "Combat values reset.", 2)
+	end,
+	"RESET"
 )
 
 --==================================================
@@ -2305,468 +3019,419 @@ end,
 --==================================================
 
 CreateSection(
-    SettingsPage,
-    "Interface",
-    "UI, display and configuration settings."
+SettingsPage,
+"Interface",
+"UI, display and configuration settings."
 )
 
 local BlurToggle = CreateToggle(
-    SettingsPage,
-    "Background Blur",
-    "Toggle the background blur effect.",
-    false,
-    function(state)
-        local Blur = Lighting:FindFirstChild("FlarehookBlur")
-        if state then
-            if not Blur then
-                Blur = Instance.new("BlurEffect")
-                Blur.Name = "FlarehookBlur"
-                Blur.Size = 10
-                Blur.Parent = Lighting
-            end
-        elseif Blur then
-            Blur:Destroy()
-        end
-    end
+SettingsPage,
+"Background Blur",
+"Toggle the background blur effect.",
+false,
+function(state)
+local Blur = Lighting:FindFirstChild("FlarehookBlur")
+
+if state then
+if not Blur then
+Blur = Instance.new("BlurEffect")
+Blur.Name = "FlarehookBlur"
+Blur.Size = 10
+Blur.Parent = Lighting
+end
+else
+if Blur then
+Blur:Destroy()
+end
+end
+end
 )
 
 local TransparencySlider = CreateSlider(
-    SettingsPage,
-    "UI Transparency",
-    "Adjust the main window transparency.",
-    0,
-    50,
-    0,
-    function(value)
-        Main.BackgroundTransparency = value / 100
-    end
+SettingsPage,
+"UI Transparency",
+"Adjust the main window transparency.",
+0,
+50,
+0,
+function(value)
+Main.BackgroundTransparency = value / 100
+end
 )
 
 CreateToggle(
-    SettingsPage,
-    "UI Animations",
-    "Toggle interface animation state.",
-    true,
-    function(state)
-        Player:SetAttribute("FlarehookAnimations", state)
-    end
+SettingsPage,
+"UI Animations",
+"Toggle interface animation state.",
+true,
+function(state)
+Player:SetAttribute("FlarehookAnimations", state)
+end
 )
 
 CreateSection(
-    SettingsPage,
-    "Keybinds",
-    "Keyboard controls for the interface."
+SettingsPage,
+"Keybinds",
+"Keyboard controls for the interface."
 )
 
 CreateTextbox(
-    SettingsPage,
-    "Toggle Key",
-    "Key used to open and close the interface.",
-    "Insert key...",
-    function(value)
-        Player:SetAttribute("FlarehookToggleKey", value)
-    end
+SettingsPage,
+"Toggle Key",
+"Key used to open and close the interface.",
+"Insert key...",
+function(text)
+	local key = Enum.KeyCode[string.upper(string.gsub(text, "%s+", ""))]
+	if key then
+		ToggleKey = key
+		Player:SetAttribute("FlarehookToggleKey", key.Name)
+		Notify("Settings", "Toggle key set to " .. key.Name .. ".", 2)
+	else
+		Notify("Settings", "Invalid toggle key.", 2)
+	end
+end
 )
 
 CreateTextbox(
-    SettingsPage,
-    "Panic Key",
-    "Key used for panic mode.",
-    "Insert key...",
-    function(value)
-        Player:SetAttribute("FlarehookPanicKey", value)
-    end
+SettingsPage,
+"Panic Key",
+"Key used for panic mode.",
+"Insert key...",
+function(text)
+	local key = Enum.KeyCode[string.upper(string.gsub(text, "%s+", ""))]
+	if key then
+		PanicKey = key
+		Player:SetAttribute("FlarehookPanicKey", key.Name)
+		Notify("Settings", "Panic key set to " .. key.Name .. ".", 2)
+	else
+		Notify("Settings", "Invalid panic key.", 2)
+	end
+end
 )
 
 CreateSection(
-    SettingsPage,
-    "Configuration",
-    "Save every supported toggle, slider, dropdown and color setting as JSON."
+SettingsPage,
+"Configuration",
+"Save, load and manage your Flarehook settings."
 )
 
-local ConfigFolder = "FLAREHOOK"
-local ConfigName = "default"
-local AutoLoadConfig = false
-local ConfigNameBox
+local ConfigNameBox = CreateTextbox(
+SettingsPage,
+"Config Name",
+"Name used for saving and loading a configuration.",
+"default",
+function(text)
+text = tostring(text or "")
+text = string.gsub(text, "[^%w_%-%s]", "")
+text = string.gsub(text, "^%s+", "")
+text = string.gsub(text, "%s+$", "")
+if text ~= "" then
+ConfigName = text
+end
+end
+)
 
-local function ConfigPath(name)
-    name = tostring(name or ""):gsub("[^%w_%-%s]", "")
-    name = name:gsub("^%s+", ""):gsub("%s+$", "")
-    if name == "" then
-        name = "default"
-    end
-    return ConfigFolder .. "/" .. name .. ".json"
+local AutoloadToggle = CreateToggle(
+SettingsPage,
+"Autoload Config",
+"Automatically load the selected config when the script starts.",
+false,
+function(state)
+ConfigAutoload = state
+if type(isfile) == "function" and type(writefile) == "function" and type(makefolder) == "function" then
+pcall(makefolder, "Flarehook")
+if state then
+pcall(writefile, "Flarehook/autoload.txt", ConfigName)
+elseif isfile("Flarehook/autoload.txt") and type(delfile) == "function" then
+pcall(delfile, "Flarehook/autoload.txt")
+end
+end
+end
+)
+
+local function ConfigCanUseFiles()
+return type(isfile) == "function"
+and type(readfile) == "function"
+and type(writefile) == "function"
+and type(delfile) == "function"
+and type(makefolder) == "function"
 end
 
-local function HasFileApi()
-    return isfile and readfile and writefile and delfile
-end
-
-local function EnsureConfigFolder()
-    if makefolder and isfolder and not isfolder(ConfigFolder) then
-        pcall(makefolder, ConfigFolder)
-    end
+local function ConfigFile(name)
+return "Flarehook/" .. tostring(name) .. ".json"
 end
 
 local function BuildConfig()
-    return {
-        -- Interface toggles
-        NotificationsEnabled = NotificationsEnabled,
-        PanicEnabled = PanicEnabled,
-        MovementEnabled = MovementEnabled,
-        CharacterVisible = CharacterVisible,
-        ThirdPersonEnabled = ThirdPersonEnabled,
+local Data = {
+ConfigName = ConfigName,
+Toggles = {},
+Sliders = {},
+Dropdowns = {}
+}
 
-        -- Visual toggles
-        ESPEnabled = ESPEnabled,
-        HighlightsEnabled = HighlightsEnabled,
-        NameTagsEnabled = NameTagsEnabled,
-        HealthBarsEnabled = HealthBarsEnabled,
-        DistanceEnabled = DistanceEnabled,
-        TracersEnabled = TracersEnabled,
-        TeamColorsEnabled = TeamColorsEnabled,
-        CrosshairEnabled = CrosshairEnabled,
-        HitEffectsEnabled = HitEffectsEnabled,
-
-        -- Visual sliders / numbers
-        CrosshairSize = CrosshairSize,
-        CrosshairGap = CrosshairGap,
-        CrosshairThickness = CrosshairThickness,
-
-        -- Combat toggles
-        AimAssistEnabled = AimAssistEnabled,
-        AimbotEnabled = AimbotEnabled,
-        TargetLockEnabled = TargetLockEnabled,
-        TeamCheckEnabled = TeamCheckEnabled,
-        VisibilityCheckEnabled = VisibilityCheckEnabled,
-        FOVCircleEnabled = FOVCircleEnabled,
-        TriggerbotEnabled = TriggerbotEnabled,
-        AutoShootEnabled = AutoShootEnabled,
-        RecoilControlEnabled = RecoilControlEnabled,
-        HitboxEnabled = HitboxEnabled,
-
-        -- Combat sliders / numbers
-        FOVRadius = FOVRadius,
-        Prediction = Prediction,
-        Smoothing = Smoothing,
-        AimAssistSpeed = AimAssistSpeed,
-        Range = Range,
-        RecoilStrength = RecoilStrength,
-        HitboxSize = HitboxSize,
-
-        -- Combat dropdowns
-        TargetPriority = TargetPriority,
-        TargetPart = TargetPart,
-
-        -- World numbers
-        Brightness = Lighting.Brightness,
-        ClockTime = Lighting.ClockTime,
-        GlobalShadows = Lighting.GlobalShadows,
-
-        -- UI settings
-        BackgroundBlur = BlurToggle and false or false,
-        UITransparency = TransparencySlider and 0 or 0,
-
-        -- Colors stored as JSON-friendly numbers
-        CrosshairColor = {
-            R = CrosshairColor and CrosshairColor.R or 1,
-            G = CrosshairColor and CrosshairColor.G or 1,
-            B = CrosshairColor and CrosshairColor.B or 1
-        }
-    }
+for Name, Control in pairs(ConfigControls) do
+local ok, value = pcall(Control.Get)
+if ok then
+if Control.Type == "Toggle" then
+Data.Toggles[Name] = value == true
+elseif Control.Type == "Slider" then
+Data.Sliders[Name] = tonumber(value) or 0
+elseif Control.Type == "Dropdown" then
+Data.Dropdowns[Name] = tostring(value)
+end
+end
 end
 
-local function ApplyConfig(config)
-    if type(config) ~= "table" then
-        return false
-    end
+Data.Keybinds = {
+ToggleKey = ToggleKey.Name,
+PanicKey = PanicKey.Name
+}
 
-    local booleanKeys = {
-        "NotificationsEnabled", "PanicEnabled", "MovementEnabled",
-        "CharacterVisible", "ThirdPersonEnabled",
-        "ESPEnabled", "HighlightsEnabled", "NameTagsEnabled",
-        "HealthBarsEnabled", "DistanceEnabled", "TracersEnabled",
-        "TeamColorsEnabled", "CrosshairEnabled", "HitEffectsEnabled",
-        "AimAssistEnabled", "AimbotEnabled", "TargetLockEnabled",
-        "TeamCheckEnabled", "VisibilityCheckEnabled", "FOVCircleEnabled",
-        "TriggerbotEnabled", "AutoShootEnabled", "RecoilControlEnabled",
-        "HitboxEnabled", "GlobalShadows"
-    }
-
-    local numberKeys = {
-        "CrosshairSize", "CrosshairGap", "CrosshairThickness",
-        "FOVRadius", "Prediction", "Smoothing", "AimAssistSpeed",
-        "Range", "RecoilStrength", "HitboxSize",
-        "Brightness", "ClockTime"
-    }
-
-    for _, key in ipairs(booleanKeys) do
-        if type(config[key]) == "boolean" then
-            if key == "GlobalShadows" then
-                Lighting.GlobalShadows = config[key]
-            else
-                _ENV[key] = config[key]
-            end
-        end
-    end
-
-    for _, key in ipairs(numberKeys) do
-        if type(config[key]) == "number" then
-            _ENV[key] = config[key]
-        end
-    end
-
-    if type(config.TargetPriority) == "string" then
-        TargetPriority = config.TargetPriority
-    end
-    if type(config.TargetPart) == "string" then
-        TargetPart = config.TargetPart
-    end
-
-    if type(config.CrosshairColor) == "table" then
-        CrosshairColor = Color3.new(
-            math.clamp(tonumber(config.CrosshairColor.R) or 1, 0, 1),
-            math.clamp(tonumber(config.CrosshairColor.G) or 1, 0, 1),
-            math.clamp(tonumber(config.CrosshairColor.B) or 1, 0, 1)
-        )
-    end
-
-    if type(config.Brightness) == "number" then
-        Lighting.Brightness = config.Brightness
-    end
-    if type(config.ClockTime) == "number" then
-        Lighting.ClockTime = config.ClockTime
-    end
-
-    RefreshESP()
-    ApplyHitboxes()
-    return true
+return Data
 end
 
-local function EncodeConfig()
-    return HttpService:JSONEncode(BuildConfig())
+local function ApplyConfig(Data)
+if type(Data) ~= "table" then
+return false
 end
 
-local function CreateConfig(name)
-    if not HasFileApi() then
-        Notify("Flarehook", "File APIs are unavailable.", 3)
-        return
-    end
-
-    EnsureConfigFolder()
-    local path = ConfigPath(name)
-
-    if isfile(path) then
-        Notify("Flarehook", "Config already exists. Use Overwrite Config.", 3)
-        return
-    end
-
-    writefile(path, EncodeConfig())
-    Notify("Flarehook", "Created config: " .. tostring(name), 3)
+for Name, Value in pairs(Data.Toggles or {}) do
+local Control = ConfigControls[Name]
+if Control and Control.Type == "Toggle" and type(Value) == "boolean" then
+Control.Set(Value)
+end
 end
 
-local function OverwriteConfig(name)
-    if not HasFileApi() then
-        Notify("Flarehook", "File APIs are unavailable.", 3)
-        return
-    end
-
-    EnsureConfigFolder()
-    writefile(ConfigPath(name), EncodeConfig())
-    Notify("Flarehook", "Overwrote config: " .. tostring(name), 3)
+for Name, Value in pairs(Data.Sliders or {}) do
+local Control = ConfigControls[Name]
+if Control and Control.Type == "Slider" and type(Value) == "number" then
+Control.Set(Value)
+end
 end
 
-local function DeleteConfig(name)
-    if not HasFileApi() then
-        Notify("Flarehook", "File APIs are unavailable.", 3)
-        return
-    end
-
-    local path = ConfigPath(name)
-    if not isfile(path) then
-        Notify("Flarehook", "Config does not exist.", 3)
-        return
-    end
-
-    delfile(path)
-    Notify("Flarehook", "Deleted config: " .. tostring(name), 3)
+for Name, Value in pairs(Data.Dropdowns or {}) do
+local Control = ConfigControls[Name]
+if Control and Control.Type == "Dropdown" and type(Value) == "string" then
+Control.Set(Value)
+end
 end
 
-local function LoadConfig(name)
-    if not HasFileApi() then
-        Notify("Flarehook", "File APIs are unavailable.", 3)
-        return
-    end
-
-    local path = ConfigPath(name)
-    if not isfile(path) then
-        Notify("Flarehook", "Config does not exist.", 3)
-        return
-    end
-
-    local ok, config = pcall(function()
-        return HttpService:JSONDecode(readfile(path))
-    end)
-
-    if not ok then
-        Notify("Flarehook", "Invalid JSON in config.", 3)
-        return
-    end
-
-    if ApplyConfig(config) then
-        Notify("Flarehook", "Loaded config: " .. tostring(name), 3)
-    else
-        Notify("Flarehook", "Could not apply config.", 3)
-    end
+if type(Data.Keybinds) == "table" then
+local Toggle = Data.Keybinds.ToggleKey
+local Panic = Data.Keybinds.PanicKey
+if type(Toggle) == "string" and Enum.KeyCode[Toggle] then
+ToggleKey = Enum.KeyCode[Toggle]
+Player:SetAttribute("FlarehookToggleKey", Toggle)
+end
+if type(Panic) == "string" and Enum.KeyCode[Panic] then
+PanicKey = Enum.KeyCode[Panic]
+Player:SetAttribute("FlarehookPanicKey", Panic)
+end
 end
 
-local function SetAutoload(name)
-    if not HasFileApi() then
-        Notify("Flarehook", "File APIs are unavailable.", 3)
-        return
-    end
-
-    EnsureConfigFolder()
-    writefile(ConfigFolder .. "/autoload.txt", tostring(name))
-    AutoLoadConfig = true
-    Notify("Flarehook", "Autoload set to: " .. tostring(name), 3)
+if type(Data.ConfigName) == "string" and Data.ConfigName ~= "" then
+ConfigName = Data.ConfigName
+ConfigNameBox.Text = ConfigName
 end
 
-local function GetAutoload()
-    if not HasFileApi() or not isfile(ConfigFolder .. "/autoload.txt") then
-        return nil
-    end
-
-    local ok, value = pcall(readfile, ConfigFolder .. "/autoload.txt")
-    if ok and value and value ~= "" then
-        return value
-    end
+return true
 end
 
-ConfigNameBox = CreateTextbox(
-    SettingsPage,
-    "Config Name",
-    "Name used for the JSON config file.",
-    "Config name...",
-    function(value)
-        value = tostring(value or ""):gsub("[^%w_%-%s]", "")
-        value = value:gsub("^%s+", ""):gsub("%s+$", "")
-        ConfigName = value ~= "" and value or "default"
-    end
+local function SaveConfig(name, overwrite)
+if not ConfigCanUseFiles() then
+Notify("Config", "File APIs are unavailable in this environment.", 3)
+return false
+end
+
+name = tostring(name or ConfigName)
+name = string.gsub(name, "[^%w_%-%s]", "")
+name = string.gsub(name, "^%s+", "")
+name = string.gsub(name, "%s+$", "")
+
+if name == "" then
+Notify("Config", "Enter a config name first.", 2)
+return false
+end
+
+pcall(makefolder, "Flarehook")
+local Path = ConfigFile(name)
+
+if isfile(Path) and not overwrite then
+Notify("Config", "Config already exists. Use Overwrite.", 3)
+return false
+end
+
+ConfigName = name
+ConfigNameBox.Text = name
+
+local ok, Json = pcall(function()
+return HttpService:JSONEncode(BuildConfig())
+end)
+if not ok then
+Notify("Config", "Failed to encode config JSON.", 3)
+return false
+end
+
+local success = pcall(writefile, Path, Json)
+if not success then
+Notify("Config", "Failed to write config.", 3)
+return false
+end
+
+Notify("Config", (overwrite and "Overwrote " or "Created ") .. name .. ".", 2)
+return true
+end
+
+local function LoadConfig(name, silent)
+if not ConfigCanUseFiles() then
+if not silent then Notify("Config", "File APIs are unavailable in this environment.", 3) end
+return false
+end
+
+name = tostring(name or ConfigName)
+local Path = ConfigFile(name)
+if not isfile(Path) then
+if not silent then Notify("Config", "Config not found: " .. name, 3) end
+return false
+end
+
+local okRead, Raw = pcall(readfile, Path)
+if not okRead then
+if not silent then Notify("Config", "Failed to read config.", 3) end
+return false
+end
+
+local okDecode, Data = pcall(function()
+return HttpService:JSONDecode(Raw)
+end)
+if not okDecode then
+if not silent then Notify("Config", "Invalid JSON in config.", 3) end
+return false
+end
+
+if not ApplyConfig(Data) then
+if not silent then Notify("Config", "Failed to apply config.", 3) end
+return false
+end
+
+ConfigName = name
+ConfigNameBox.Text = name
+
+if not silent then Notify("Config", "Loaded " .. name .. ".", 2) end
+return true
+end
+
+CreateButton(
+SettingsPage,
+"Create Config",
+"Create a new JSON config without overwriting an existing file.",
+function()
+SaveConfig(ConfigName, false)
+end,
+"CREATE"
 )
 
 CreateButton(
-    SettingsPage,
-    "Create Config",
-    "Create a new JSON config without overwriting an existing one.",
-    function()
-        CreateConfig(ConfigName)
-    end,
-    "CREATE"
+SettingsPage,
+"Overwrite Config",
+"Overwrite the selected config with the current UI values.",
+function()
+SaveConfig(ConfigName, true)
+end,
+"OVERWRITE"
 )
 
 CreateButton(
-    SettingsPage,
-    "Overwrite Config",
-    "Overwrite the selected config with the current settings.",
-    function()
-        OverwriteConfig(ConfigName)
-    end,
-    "SAVE"
+SettingsPage,
+"Load Config",
+"Load the selected JSON config and apply its saved values.",
+function()
+LoadConfig(ConfigName, false)
+end,
+"LOAD"
 )
 
 CreateButton(
-    SettingsPage,
-    "Load Config",
-    "Load the selected JSON config.",
-    function()
-        LoadConfig(ConfigName)
-    end,
-    "LOAD"
+SettingsPage,
+"Delete Config",
+"Delete the selected config file.",
+function()
+if not ConfigCanUseFiles() then
+Notify("Config", "File APIs are unavailable in this environment.", 3)
+return
+end
+local Path = ConfigFile(ConfigName)
+if isfile(Path) then
+local ok = pcall(delfile, Path)
+Notify("Config", ok and ("Deleted " .. ConfigName .. ".") or "Failed to delete config.", 2)
+else
+Notify("Config", "Config not found: " .. ConfigName, 2)
+end
+end,
+"DELETE"
 )
 
 CreateButton(
-    SettingsPage,
-    "Delete Config",
-    "Delete the selected JSON config.",
-    function()
-        DeleteConfig(ConfigName)
-    end,
-    "DELETE"
-)
-
-CreateToggle(
-    SettingsPage,
-    "Autoload Config",
-    "Automatically load the saved autoload config when the script starts.",
-    false,
-    function(state)
-        AutoLoadConfig = state
-    end
-)
-
-CreateButton(
-    SettingsPage,
-    "Set As Autoload",
-    "Set the current config name as the startup config.",
-    function()
-        SetAutoload(ConfigName)
-    end,
-    "AUTO"
+SettingsPage,
+"Set As Autoload",
+"Save the selected config name as the startup config and enable autoload.",
+function()
+if not ConfigCanUseFiles() then
+Notify("Config", "File APIs are unavailable in this environment.", 3)
+return
+end
+pcall(makefolder, "Flarehook")
+if not isfile(ConfigFile(ConfigName)) then
+Notify("Config", "Create or save this config before setting autoload.", 3)
+return
+end
+pcall(writefile, "Flarehook/autoload.txt", ConfigName)
+ConfigAutoload = true
+AutoloadToggle.Set(true)
+Notify("Config", ConfigName .. " set as autoload.", 2)
+end,
+"SET"
 )
 
 CreateButton(
-    SettingsPage,
-    "Print Config JSON",
-    "Encode the current settings using HttpService:JSONEncode and print the JSON.",
-    function()
-        print(EncodeConfig())
-        Notify("Flarehook", "Config JSON printed to console.", 3)
-    end,
-    "JSON"
+SettingsPage,
+"Print Config JSON",
+"Encode the current settings with HttpService and print the JSON string.",
+function()
+local ok, Json = pcall(function()
+return HttpService:JSONEncode(BuildConfig())
+end)
+if ok then
+print(Json)
+Notify("Config", "Current JSON printed to the console.", 2)
+else
+Notify("Config", "Failed to encode JSON.", 2)
+end
+end,
+"PRINT"
 )
 
 CreateSection(
-    SettingsPage,
-    "Theme",
-    "Choose an accent color."
+SettingsPage,
+"Reset UI",
+"Restore the default interface settings."
 )
 
-CreateButton(SettingsPage, "Red", "Set the red accent.", function()
-    COLORS.Red = Color3.fromRGB(220, 35, 45)
-end, "RED")
+CreateButton(
+SettingsPage,
+"Reset UI",
+"Restore the default interface settings.",
+function()
+Main.BackgroundTransparency = 0
+TransparencySlider.Set(0)
+BlurToggle.Set(false)
+Main.Position = UDim2.fromScale(0.5, 0.5)
+Notify("Flarehook", "Interface reset.", 2)
+end,
+"RESET"
+)
 
-CreateButton(SettingsPage, "Crimson", "Set the crimson accent.", function()
-    COLORS.Red = Color3.fromRGB(180, 0, 0)
-end, "RED")
-
-CreateButton(SettingsPage, "White", "Set the white accent.", function()
-    COLORS.Red = Color3.fromRGB(255, 255, 255)
-end, "WHITE")
-
-CreateButton(SettingsPage, "Cyan", "Set the cyan accent.", function()
-    COLORS.Red = Color3.fromRGB(0, 255, 255)
-end, "CYAN")
-
-CreateButton(SettingsPage, "Green", "Set the green accent.", function()
-    COLORS.Red = Color3.fromRGB(0, 255, 0)
-end, "GREEN")
-
-CreateButton(SettingsPage, "Purple", "Set the purple accent.", function()
-    COLORS.Red = Color3.fromRGB(170, 0, 255)
-end, "PURPLE")
-
--- Load autoload only if the user enabled the toggle in this session.
-task.defer(function()
-    if AutoLoadConfig then
-        local autoName = GetAutoload()
-        if autoName then
-            ConfigName = autoName
-            LoadConfig(autoName)
-        end
-    end
-end)
-
+--==================================================
 -- CREDITS
 --==================================================
 
@@ -2907,7 +3572,7 @@ if gameProcessed then
 return
 end
 
-if input.KeyCode == Enum.KeyCode.Insert then
+if input.KeyCode == ToggleKey then
 UIOpen = not UIOpen
 
 if UIOpen then
@@ -2921,26 +3586,22 @@ ToggleButton.Text = "Open"
 end
 end
 
-if input.KeyCode == Enum.KeyCode.P then
-PanicEnabled = not PanicEnabled
+if input.KeyCode == PanicKey then
+	PanicEnabled = not PanicEnabled
+	RegisterFeature("Panic", PanicEnabled)
 
-if PanicEnabled then
-for Name in pairs(FeatureStates) do
-if Name ~= "Panic" then
-FeatureStates[Name] = false
-end
-end
+	if PanicEnabled then
+		ClearAllRuntimeFeatures()
+		UpdateStatus()
 
-UpdateStatus()
-
-if NotificationsEnabled then
-Notify(
-"Flarehook",
-"Panic mode enabled.",
-2
-)
-end
-end
+		if NotificationsEnabled then
+			Notify("Flarehook", "Panic mode enabled.", 2)
+		end
+	else
+		if NotificationsEnabled then
+			Notify("Flarehook", "Panic mode disabled.", 2)
+		end
+	end
 end
 end)
 
@@ -2967,6 +3628,120 @@ if ThirdPersonEnabled then
 Player.CameraMinZoomDistance = 5
 Player.CameraMaxZoomDistance = 12
 end
+
+task.wait(0.15)
+RefreshESP()
+if HitboxEnabled then
+	ApplyHitboxes()
+end
+end)
+
+
+--==================================================
+-- FEATURE RUNTIME
+--==================================================
+
+RunService.RenderStepped:Connect(function()
+	if not MainScriptEnabled or PanicEnabled then
+		return
+	end
+
+	-- Keep the FOV circle synced with the configured value.
+	local fovCircle = ScreenGui:FindFirstChild("FlarehookFOVCircle")
+	if fovCircle then
+		fovCircle.Size = UDim2.fromOffset(AimFOV * 2, AimFOV * 2)
+	end
+
+	-- Update ESP.
+	for player, data in pairs(ESPObjects) do
+		if not IsAlive(player) then
+			ClearESP(player)
+		elseif data then
+			local character = player.Character
+			local root = character and character:FindFirstChild("HumanoidRootPart")
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+			if root and humanoid then
+				local distance = (root.Position - Camera.CFrame.Position).Magnitude
+				local healthPercent = math.clamp(humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1)
+
+				data.Name.Visible = NameTagsEnabled or ESPEnabled
+				data.HealthBack.Visible = HealthBarsEnabled or ESPEnabled
+				data.Distance.Visible = DistanceEnabled or ESPEnabled
+				data.Tracer.Visible = TracersEnabled
+
+				data.Name.TextColor3 = TeamColorsEnabled and player.TeamColor.Color or ESPColor
+				data.Health.BackgroundColor3 = TeamColorsEnabled and player.TeamColor.Color or ESPColor
+				data.Health.Size = UDim2.fromScale(healthPercent, 1)
+				data.Distance.Text = math.floor(distance) .. " studs"
+
+				local screenPoint, onScreen = Camera:WorldToViewportPoint(root.Position)
+				if onScreen and TracersEnabled then
+					local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+					local endpoint = Vector2.new(screenPoint.X, screenPoint.Y)
+					local delta = endpoint - center
+
+					data.Tracer.Position = UDim2.fromOffset(center.X, center.Y)
+					data.Tracer.Size = UDim2.fromOffset(2, math.max(delta.Magnitude, 1))
+					data.Tracer.Rotation = math.deg(math.atan2(delta.Y, delta.X)) + 90
+					data.Tracer.BackgroundColor3 = TeamColorsEnabled and player.TeamColor.Color or ESPColor
+				end
+			end
+		end
+	end
+
+	-- Apply local test hitboxes.
+	if HitboxEnabled then
+		ApplyHitboxes()
+	end
+
+	-- Targeting.
+	if AimAssistEnabled or AimbotEnabled or TriggerbotEnabled or AutoShootEnabled then
+		local target, part = GetTarget()
+
+		if target and part then
+			if AimbotEnabled then
+				AimAt(part, AimSmoothing)
+			elseif AimAssistEnabled then
+				AimAt(part, AimAssistSmoothing)
+			end
+
+			if TriggerbotEnabled then
+				local screenDistance = GetScreenDistance(part.Position)
+				if screenDistance <= math.max(6, CrosshairSize + 4) then
+					FireCurrentTool()
+				end
+			end
+
+			if AutoShootEnabled then
+				FireCurrentTool()
+			end
+		else
+			if not TargetLockEnabled then
+				ClearTargetLock()
+			end
+		end
+	end
+
+	-- Lightweight local recoil compensation hook.
+	if RecoilControlEnabled and RecoilStrength > 0 then
+		local recoil = math.rad(RecoilStrength / 1000)
+		Camera.CFrame = Camera.CFrame * CFrame.Angles(-recoil, 0, 0)
+	end
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	ClearESP(player)
+end)
+
+Players.PlayerAdded:Connect(function(player)
+	player.CharacterAdded:Connect(function()
+		task.wait(0.25)
+		RefreshESP()
+		if HitboxEnabled then
+			ApplyHitboxes()
+		end
+	end)
 end)
 
 --==================================================
@@ -3017,12 +3792,10 @@ Data.Indicator.Visible = Active
 
 if Active then
 Data.Button.BackgroundColor3 = Color3.fromRGB(29, 20, 23)
-Data.Icon.TextColor3 = COLORS.White
 Data.Label.TextColor3 = COLORS.White
 Data.Label.Font = Enum.Font.GothamBold
 else
 Data.Button.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
-Data.Icon.TextColor3 = COLORS.Muted
 Data.Label.TextColor3 = COLORS.Muted
 end
 end
@@ -3038,13 +3811,34 @@ end
 RegisterFeature("Script", true)
 RegisterFeature("Panic", false)
 
-Player:SetAttribute("FlarehookRange", 50)
-Player:SetAttribute("FlarehookSmoothness", 8)
-Player:SetAttribute("FlarehookTargetMode", "Closest")
+Player:SetAttribute("FlarehookRange", 100)
+Player:SetAttribute("FlarehookSmoothness", 0.35)
+Player:SetAttribute("FlarehookTargetPriority", "Closest to Crosshair")
+Player:SetAttribute("FlarehookPrediction", 0)
 Player:SetAttribute("FlarehookCameraSensitivity", 1)
+Player:SetAttribute("FlarehookToggleKey", ToggleKey.Name)
+Player:SetAttribute("FlarehookPanicKey", PanicKey.Name)
 
 if Camera then
 Camera.FieldOfView = 70
+end
+
+--==================================================
+-- AUTOLOAD CONFIG
+--==================================================
+
+if ConfigCanUseFiles() and isfile("Flarehook/autoload.txt") then
+local ok, SavedName = pcall(readfile, "Flarehook/autoload.txt")
+if ok and type(SavedName) == "string" and SavedName ~= "" then
+SavedName = string.gsub(SavedName, "[^%w_%-%s]", "")
+ConfigName = SavedName
+ConfigNameBox.Text = ConfigName
+ConfigAutoload = true
+AutoloadToggle.Set(true)
+task.defer(function()
+LoadConfig(ConfigName, true)
+end)
+end
 end
 
 --==================================================
