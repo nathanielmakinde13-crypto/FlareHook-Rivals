@@ -55,6 +55,27 @@ NeutralButton = Color3.fromRGB(31, 31, 36),
 NeutralHover = Color3.fromRGB(42, 42, 48)
 }
 
+-- Theme palettes. CORNER_RADIUS intentionally remains unchanged.
+local THEMES = {
+    Onyx = {
+        Black=Color3.fromRGB(6,7,9), Dark=Color3.fromRGB(10,11,14), Panel=Color3.fromRGB(15,17,20), Panel2=Color3.fromRGB(20,22,26), Panel3=Color3.fromRGB(27,30,35),
+        Red=Color3.fromRGB(220,35,45), RedHover=Color3.fromRGB(245,48,58), RedDark=Color3.fromRGB(135,22,29), White=Color3.fromRGB(245,245,247), Text=Color3.fromRGB(220,220,225), Muted=Color3.fromRGB(140,140,150), Border=Color3.fromRGB(42,45,51), NeutralButton=Color3.fromRGB(30,32,37), NeutralHover=Color3.fromRGB(43,46,53)
+    },
+    Aqua = {
+        Black=Color3.fromRGB(6,10,12), Dark=Color3.fromRGB(9,15,18), Panel=Color3.fromRGB(13,22,26), Panel2=Color3.fromRGB(18,31,36), Panel3=Color3.fromRGB(24,41,47),
+        Red=Color3.fromRGB(35,205,220), RedHover=Color3.fromRGB(65,230,242), RedDark=Color3.fromRGB(18,125,140), White=Color3.fromRGB(240,250,252), Text=Color3.fromRGB(205,232,236), Muted=Color3.fromRGB(125,165,172), Border=Color3.fromRGB(35,65,72), NeutralButton=Color3.fromRGB(25,43,48), NeutralHover=Color3.fromRGB(36,61,67)
+    },
+    Binary = {
+        Black=Color3.fromRGB(2,2,2), Dark=Color3.fromRGB(8,8,8), Panel=Color3.fromRGB(14,14,14), Panel2=Color3.fromRGB(20,20,20), Panel3=Color3.fromRGB(28,28,28),
+        Red=Color3.fromRGB(235,235,235), RedHover=Color3.fromRGB(255,255,255), RedDark=Color3.fromRGB(95,95,95), White=Color3.fromRGB(255,255,255), Text=Color3.fromRGB(225,225,225), Muted=Color3.fromRGB(145,145,145), Border=Color3.fromRGB(55,55,55), NeutralButton=Color3.fromRGB(32,32,32), NeutralHover=Color3.fromRGB(48,48,48)
+    },
+    Obsidian = {
+        Black=Color3.fromRGB(9,7,12), Dark=Color3.fromRGB(14,11,18), Panel=Color3.fromRGB(21,16,27), Panel2=Color3.fromRGB(29,22,36), Panel3=Color3.fromRGB(38,29,47),
+        Red=Color3.fromRGB(172,95,255), RedHover=Color3.fromRGB(195,130,255), RedDark=Color3.fromRGB(102,54,155), White=Color3.fromRGB(247,242,252), Text=Color3.fromRGB(225,215,235), Muted=Color3.fromRGB(150,135,165), Border=Color3.fromRGB(61,46,72), NeutralButton=Color3.fromRGB(40,31,48), NeutralHover=Color3.fromRGB(56,43,66)
+    }
+}
+local CurrentTheme = "Onyx"
+
 --==================================================
 -- STATE
 --==================================================
@@ -105,6 +126,7 @@ local AimbotEnabled = false
 local TriggerbotEnabled = false
 local HitboxEnabled = false
 local AutoShootEnabled = false
+local SilentAimEnabled = false
 local TeamCheckEnabled = true
 local VisibilityCheckEnabled = true
 local TargetLockEnabled = false
@@ -119,6 +141,9 @@ local AimSmoothing = 0.35 -- 0 = snap, 1 = very slow
 local AimAssistSmoothing = 0.18 -- intentionally faster than smoothing 1
 local HitboxSize = 8
 local RecoilStrength = 0
+local BoxESPMode = "2D"
+local HealthBarSide = "Left"
+local AutoShootInterval = 0.10
 
 local CrosshairColor = COLORS.Red
 local CrosshairSize = 4
@@ -226,6 +251,33 @@ data.Object[data.Property] = COLORS.Red
 end)
 end
 end
+end
+
+local function ApplyTheme(name)
+    local palette = THEMES[name]
+    if not palette then return false end
+    local old = {}
+    for key, value in pairs(COLORS) do old[key] = value end
+    for key, value in pairs(palette) do COLORS[key] = value end
+    for _, object in ipairs(ScreenGui:GetDescendants()) do
+        for _, prop in ipairs({"BackgroundColor3", "TextColor3", "BorderColor3", "ScrollBarImageColor3"}) do
+            local ok, value = pcall(function() return object[prop] end)
+            if ok and typeof(value) == "Color3" then
+                for key, oldValue in pairs(old) do
+                    if value == oldValue then pcall(function() object[prop] = COLORS[key] end) break end
+                end
+            end
+        end
+        if object:IsA("UIStroke") then
+            for key, oldValue in pairs(old) do
+                if object.Color == oldValue then object.Color = COLORS[key] break end
+            end
+        end
+    end
+    RefreshAccents()
+    CurrentTheme = name
+    Player:SetAttribute("FlarehookTheme", name)
+    return true
 end
 
 local function GetCharacter()
@@ -2161,173 +2213,91 @@ local function ClearESP(player)
 	ESPObjects[player] = nil
 end
 
+local function HealthColor(percent)
+    percent = math.clamp(percent, 0, 1)
+    return Color3.fromRGB(
+        math.floor(235 * (1 - percent)),
+        math.floor(210 * percent + 35),
+        45
+    )
+end
+
 local function BuildESP(player)
-	if player == Player or not IsAlive(player) then
-		return
-	end
+    if player == Player or not IsAlive(player) then return end
+    ClearESP(player)
+    local character = player.Character
+    local head = character and character:FindFirstChild("Head")
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not head or not root or not humanoid then return end
 
-	ClearESP(player)
+    local billboard = Create("BillboardGui", {
+        Name="FlarehookESP", Adornee=head, Size=UDim2.fromOffset(210,90), StudsOffset=Vector3.new(0,3.2,0),
+        AlwaysOnTop=true, Enabled=true, ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+    }, RuntimeFolder)
 
-	local character = player.Character
-	if not character then
-		return
-	end
+    local nameLabel = Create("TextLabel", {
+        Name="Name", BackgroundTransparency=1, Position=UDim2.fromOffset(10,0), Size=UDim2.new(1,-20,0,20),
+        Font=Enum.Font.GothamBold, Text=player.DisplayName ~= "" and player.DisplayName or player.Name,
+        TextColor3=ESPColor, TextSize=13, TextStrokeTransparency=0.45,
+        Visible=NameTagsEnabled or ESPEnabled, TextXAlignment=Enum.TextXAlignment.Center
+    }, billboard)
 
-	local head = character:FindFirstChild("Head")
-	local root = character:FindFirstChild("HumanoidRootPart")
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if not head or not root or not humanoid then
-		return
-	end
+    local distanceLabel = Create("TextLabel", {
+        Name="Distance", BackgroundTransparency=1, Position=UDim2.fromOffset(10,20), Size=UDim2.new(1,-20,0,16),
+        Font=Enum.Font.Fantasy, TextColor3=COLORS.Text, TextSize=10, TextStrokeTransparency=0.6,
+        Visible=DistanceEnabled or ESPEnabled, TextXAlignment=Enum.TextXAlignment.Center
+    }, billboard)
 
-	local billboard = Create("BillboardGui", {
-		Name = "FlarehookESP",
-		Adornee = head,
-		Size = UDim2.fromOffset(190, 70),
-		StudsOffset = Vector3.new(0, 2.8, 0),
-		AlwaysOnTop = true,
-		Enabled = true,
-		ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	}, RuntimeFolder)
+    local sideBack = Create("Frame", {
+        Name="HealthBack", BackgroundColor3=Color3.fromRGB(30,30,34), BorderSizePixel=0,
+        AnchorPoint=Vector2.new(0,0.5), Position=UDim2.new(0,0,0.5,0), Size=UDim2.fromOffset(5,52),
+        Visible=HealthBarsEnabled or ESPEnabled
+    }, billboard)
+    AddCorner(sideBack, 2)
+    local sideFill = Create("Frame", {
+        Name="Health", BackgroundColor3=HealthColor(1), BorderSizePixel=0,
+        AnchorPoint=Vector2.new(0,1), Position=UDim2.new(0,0,1,0), Size=UDim2.fromScale(1,1)
+    }, sideBack)
+    AddCorner(sideFill, 2)
 
-	local nameLabel = Create("TextLabel", {
-		Name = "Name",
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, 22),
-		Font = Enum.Font.GothamBold,
-		Text = player.DisplayName ~= "" and player.DisplayName or player.Name,
-		TextColor3 = ESPColor,
-		TextSize = 13,
-		TextStrokeTransparency = 0.5,
-		Visible = NameTagsEnabled or ESPEnabled
-	}, billboard)
+    local box2D = Create("Frame", {
+        Name="Box2D", BackgroundTransparency=1, BorderSizePixel=0, Visible=false, ZIndex=790
+    }, ScreenGui)
+    AddStroke(box2D, ESPColor, 0, 1)
 
-	local healthBack = Create("Frame", {
-		Name = "HealthBack",
-		BackgroundColor3 = Color3.fromRGB(30, 30, 34),
-		BorderSizePixel = 0,
-		Position = UDim2.new(0.1, 0, 0, 25),
-		Size = UDim2.new(0.8, 0, 0, 7),
-		Visible = HealthBarsEnabled or ESPEnabled
-	}, billboard)
-	AddCorner(healthBack, 2)
+    local box3D = Instance.new("BoxHandleAdornment")
+    box3D.Name="Box3D"
+    box3D.Adornee=root
+    box3D.AlwaysOnTop=true
+    box3D.ZIndex=5
+    box3D.Size=Vector3.new(4.2,6.5,2.2)
+    box3D.Color3=ESPColor
+    box3D.Transparency=0.75
+    box3D.Visible=false
+    box3D.Parent=RuntimeFolder
 
-	local healthFill = Create("Frame", {
-		Name = "Health",
-		BackgroundColor3 = ESPColor,
-		BorderSizePixel = 0,
-		Size = UDim2.fromScale(1, 1)
-	}, healthBack)
-	AddCorner(healthFill, 2)
+    local tracer = Create("Frame", {
+        Name="Tracer", AnchorPoint=Vector2.new(0.5,0), BackgroundColor3=ESPColor, BorderSizePixel=0,
+        Size=UDim2.fromOffset(2,100), Visible=false, ZIndex=790
+    }, ScreenGui)
 
-	local distanceLabel = Create("TextLabel", {
-		Name = "Distance",
-		BackgroundTransparency = 1,
-		Position = UDim2.new(0, 0, 0, 34),
-		Size = UDim2.new(1, 0, 0, 18),
-		Font = Enum.Font.Fantasy,
-		TextColor3 = COLORS.Text,
-		TextSize = 10,
-		TextStrokeTransparency = 0.6,
-		Visible = DistanceEnabled or ESPEnabled
-	}, billboard)
-
-	local tracer = Create("Frame", {
-		Name = "Tracer",
-		AnchorPoint = Vector2.new(0.5, 0),
-		BackgroundColor3 = ESPColor,
-		BorderSizePixel = 0,
-		Size = UDim2.fromOffset(2, 100),
-		Visible = false,
-		ZIndex = 790
-	}, ScreenGui)
-
-	ESPObjects[player] = {
-		Billboard = billboard,
-		Name = nameLabel,
-		HealthBack = healthBack,
-		Health = healthFill,
-		Distance = distanceLabel,
-		Tracer = tracer,
-	}
+    ESPObjects[player] = {
+        Billboard=billboard, Name=nameLabel, Distance=distanceLabel, HealthBack=sideBack, Health=sideFill,
+        Box2D=box2D, Box3D=box3D, Tracer=tracer
+    }
 end
 
 local function RefreshESP()
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= Player then
-			if ESPEnabled or NameTagsEnabled or HealthBarsEnabled or DistanceEnabled or TracersEnabled then
-				BuildESP(player)
-			else
-				ClearESP(player)
-			end
-		end
-	end
-end
-
-local function ApplyHitboxes()
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= Player and IsAlive(player) and not IsTeammate(player) then
-			local head = player.Character:FindFirstChild("Head")
-			if head then
-				if HitboxEnabled then
-					if not HitboxOriginals[head] then
-						HitboxOriginals[head] = {
-							Size = head.Size,
-							Transparency = head.Transparency,
-							CanCollide = head.CanCollide
-						}
-					end
-
-					head.Size = Vector3.new(HitboxSize, HitboxSize, HitboxSize)
-					head.Transparency = math.max(head.Transparency, 0.5)
-					head.CanCollide = false
-				elseif HitboxOriginals[head] then
-					local original = HitboxOriginals[head]
-					head.Size = original.Size
-					head.Transparency = original.Transparency
-					head.CanCollide = original.CanCollide
-					HitboxOriginals[head] = nil
-				end
-			end
-		end
-	end
-end
-
-local function ClearAllRuntimeFeatures()
-	AimAssistEnabled = false
-	AimbotEnabled = false
-	TriggerbotEnabled = false
-	HitboxEnabled = false
-	AutoShootEnabled = false
-	FOVCircleEnabled = false
-	TargetLockEnabled = false
-	RecoilControlEnabled = false
-	ESPEnabled = false
-	NameTagsEnabled = false
-	HealthBarsEnabled = false
-	DistanceEnabled = false
-	TracersEnabled = false
-	TeamColorsEnabled = false
-	HitEffectsEnabled = false
-	ClearTargetLock()
-
-	for player in pairs(ESPObjects) do
-		ClearESP(player)
-	end
-
-	for part, original in pairs(HitboxOriginals) do
-		if part and part.Parent then
-			part.Size = original.Size
-			part.Transparency = original.Transparency
-			part.CanCollide = original.CanCollide
-		end
-		HitboxOriginals[part] = nil
-	end
-
-	local crosshair = ScreenGui:FindFirstChild("FlarehookCrosshair")
-	if crosshair then
-		crosshair.Visible = false
-	end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= Player then
+            if ESPEnabled or NameTagsEnabled or HealthBarsEnabled or DistanceEnabled or TracersEnabled or BoxESPMode ~= "Off" then
+                BuildESP(player)
+            else
+                ClearESP(player)
+            end
+        end
+    end
 end
 
 --==================================================
@@ -2440,6 +2410,16 @@ CreateToggle(
 		RegisterFeature("Team Colors", state)
 		RefreshESP()
 	end
+)
+
+CreateDropdown(
+    VisualsPage, "Box ESP", "Select the box presentation used around players.",
+    {"Off", "2D", "3D"}, "2D",
+    function(option)
+        BoxESPMode = option
+        RegisterFeature("Box ESP", option ~= "Off")
+        RefreshESP()
+    end
 )
 
 CreateSection(
@@ -2664,6 +2644,17 @@ CreateToggle(
 )
 
 CreateToggle(
+    CombatPage, "Silent Aim", "Publishes the selected target and predicted shot direction for your game's weapon controller.", false,
+    function(state)
+        SilentAimEnabled = state
+        RegisterFeature("Silent Aim", state)
+        if not state then
+            Player:SetAttribute("FlarehookSilentAimTargetUserId", nil)
+        end
+    end
+)
+
+CreateToggle(
 	CombatPage,
 	"Target Lock",
 	"Keep the current target until it becomes invalid.",
@@ -2846,6 +2837,10 @@ CreateToggle(
 	end
 )
 
+CreateSlider(CombatPage, "Auto Shoot Rate", "Minimum time between automatic Tool activations.", 5, 1000, 100, function(value)
+    AutoShootInterval = value / 1000
+end)
+
 CreateToggle(
 	CombatPage,
 	"Recoil Control",
@@ -3003,6 +2998,15 @@ SettingsPage,
 "UI, display and configuration settings."
 )
 
+CreateDropdown(
+    SettingsPage, "Theme", "Choose the interface palette. Corner radius remains unchanged.",
+    {"Onyx", "Aqua", "Binary", "Obsidian"}, "Onyx",
+    function(option)
+        ApplyTheme(option)
+        Notify("Theme", option .. " theme applied.", 2)
+    end
+)
+
 local BlurToggle = CreateToggle(
 SettingsPage,
 "Background Blur",
@@ -3094,6 +3098,23 @@ SettingsPage,
 "Save, load and manage your Flarehook settings."
 )
 
+CreateButton(
+    SettingsPage, "API Status", "Show which optional executor file/global APIs are available.",
+    function()
+        local checks = {
+            "getgenv=" .. tostring(type(getgenv)=="function"),
+            "isfile=" .. tostring(type(isfile)=="function"),
+            "readfile=" .. tostring(type(readfile)=="function"),
+            "writefile=" .. tostring(type(writefile)=="function"),
+            "makefolder=" .. tostring(type(makefolder)=="function"),
+            "delfile=" .. tostring(type(delfile)=="function"),
+            "setclipboard=" .. tostring(type(setclipboard)=="function")
+        }
+        Notify("APIs", table.concat(checks, " | "), 5)
+    end, "CHECK"
+)
+
+
 local ConfigNameBox = CreateTextbox(
 SettingsPage,
 "Config Name",
@@ -3142,7 +3163,9 @@ end
 
 local function BuildConfig()
 local Data = {
+ConfigVersion = 3,
 ConfigName = ConfigName,
+Theme = CurrentTheme,
 Toggles = {},
 Sliders = {},
 Dropdowns = {}
@@ -3172,6 +3195,10 @@ end
 local function ApplyConfig(Data)
 if type(Data) ~= "table" then
 return false
+end
+
+if type(Data.Theme) == "string" and THEMES[Data.Theme] then
+    ApplyTheme(Data.Theme)
 end
 
 for Name, Value in pairs(Data.Toggles or {}) do
@@ -3443,7 +3470,7 @@ CreditsPage,
 function()
 Notify(
 "Flarehook",
-"Version 2.0 | Advanced interface",
+"Version 3.0 | Themed interface + enhanced ESP",
 3
 )
 end,
@@ -3457,7 +3484,7 @@ CreditsPage,
 function()
 Notify(
 "Credits",
-"Flarehook UI | Red/Black interface | v2.0",
+"Flarehook UI | Multi-theme interface | v3.0",
 4
 )
 end,
@@ -3639,31 +3666,41 @@ RunService.RenderStepped:Connect(function()
 			local character = player.Character
 			local root = character and character:FindFirstChild("HumanoidRootPart")
 			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-
 			if root and humanoid then
 				local distance = (root.Position - Camera.CFrame.Position).Magnitude
 				local healthPercent = math.clamp(humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1)
-
+				local accent = TeamColorsEnabled and player.TeamColor.Color or ESPColor
 				data.Name.Visible = NameTagsEnabled or ESPEnabled
-				data.HealthBack.Visible = HealthBarsEnabled or ESPEnabled
 				data.Distance.Visible = DistanceEnabled or ESPEnabled
+				data.HealthBack.Visible = HealthBarsEnabled or ESPEnabled
+				data.Name.TextColor3 = accent
+				data.Health.BackgroundColor3 = HealthColor(healthPercent)
+				data.Health.Size = UDim2.fromScale(1, healthPercent)
+				data.Distance.Text = math.floor(distance) .. " studs"
+				data.Box2D.Visible = BoxESPMode == "2D" and (ESPEnabled or BoxESPMode ~= "Off")
+				data.Box3D.Visible = BoxESPMode == "3D" and (ESPEnabled or BoxESPMode ~= "Off")
+				data.Box2D.UIStroke.Color = accent
+				data.Box3D.Color3 = accent
 				data.Tracer.Visible = TracersEnabled
 
-				data.Name.TextColor3 = TeamColorsEnabled and player.TeamColor.Color or ESPColor
-				data.Health.BackgroundColor3 = TeamColorsEnabled and player.TeamColor.Color or ESPColor
-				data.Health.Size = UDim2.fromScale(healthPercent, 1)
-				data.Distance.Text = math.floor(distance) .. " studs"
+				local rootPoint, rootOnScreen = Camera:WorldToViewportPoint(root.Position)
+				local topPoint, topOnScreen = Camera:WorldToViewportPoint(root.Position + Vector3.new(0, 3.25, 0))
+				if rootOnScreen and topOnScreen then
+					local h = math.abs(rootPoint.Y - topPoint.Y) * 2.0
+					local w = math.max(h * 0.42, 18)
+					data.Box2D.Position = UDim2.fromOffset(rootPoint.X - w/2, topPoint.Y)
+					data.Box2D.Size = UDim2.fromOffset(w, h)
+				end
 
 				local screenPoint, onScreen = Camera:WorldToViewportPoint(root.Position)
 				if onScreen and TracersEnabled then
 					local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 					local endpoint = Vector2.new(screenPoint.X, screenPoint.Y)
 					local delta = endpoint - center
-
 					data.Tracer.Position = UDim2.fromOffset(center.X, center.Y)
 					data.Tracer.Size = UDim2.fromOffset(2, math.max(delta.Magnitude, 1))
 					data.Tracer.Rotation = math.deg(math.atan2(delta.Y, delta.X)) + 90
-					data.Tracer.BackgroundColor3 = TeamColorsEnabled and player.TeamColor.Color or ESPColor
+					data.Tracer.BackgroundColor3 = accent
 				end
 			end
 		end
@@ -3685,6 +3722,13 @@ RunService.RenderStepped:Connect(function()
 				AimAt(part, AimAssistSmoothing)
 			end
 
+			if SilentAimEnabled then
+				local predicted = GetPredictedPosition(part) or part.Position
+				Player:SetAttribute("FlarehookSilentAimTargetUserId", target.UserId)
+				Player:SetAttribute("FlarehookSilentAimPosition", predicted)
+				Player:SetAttribute("FlarehookSilentAimDirection", (predicted - Camera.CFrame.Position).Unit)
+			end
+
 			if TriggerbotEnabled then
 				local screenDistance = GetScreenDistance(part.Position)
 				if screenDistance <= math.max(6, CrosshairSize + 4) then
@@ -3692,7 +3736,7 @@ RunService.RenderStepped:Connect(function()
 				end
 			end
 
-			if AutoShootEnabled then
+			if AutoShootEnabled and os.clock() - LastShot >= AutoShootInterval then
 				FireCurrentTool()
 			end
 		else
